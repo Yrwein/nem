@@ -24,6 +24,10 @@ def iface_name():
     return output('ls /sys/class/net | cat | grep wl')
 
 
+def iface_up(iface_name):
+    subprocess.call('ifconfig {} up'.format(iface_name), shell=True)
+
+
 def access_points(iface_name):
     access_points = []
     ssid = None
