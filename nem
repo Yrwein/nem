@@ -1,10 +1,8 @@
 #!/usr/bin/python
 
-import subprocess
-import os
-import re
-import threading
 import argparse
+from lib import network
+import time
 
 parser = argparse.ArgumentParser(description='Connect to wireless network with WPA')
 parser.add_argument('--ssid', '-s', help='SSID for wifi access point')
@@ -12,58 +10,15 @@ parser.add_argument('--pwd', '-p', help='passphrase for wifi access point')
 
 args = parser.parse_args()
 
-
-def output(cmd):
-    op = subprocess.check_output(cmd, shell=True)
-    if op:
-        return op.strip()
-
-
-class AccessPoint:
-    def __init__(self, ssid, quality):
-        self.ssid = ssid
-        self.quality = quality
-
-
-card_info = output('lspci | grep -i "wifi\|wlan\|wireless"')
 print('Card info:')
-print('  ' + card_info)
+print('  ' + network.card_info())
 
-iface_name = output('ls /sys/class/net | cat | grep wl')
 print('Interface name:')
+iface_name = network.iface_name()
 print(' ' + iface_name)
 
-access_points = []
-ssid = None
-quality = None
-ap_search = output('iwlist ' + iface_name + ' scan')
-for line in ap_search.splitlines():
-    line = line.strip()
-    if line.startswith('Cell ') and ssid is not None and quality is not None:
-        ap = AccessPoint(ssid, quality)
-        access_points.append(ap)
-    elif line.startswith('Cell '):
-        ssid = None
-        quality = None
-    elif line.startswith('ESSID'):
-        # format: ESSID:"UPC5774344"
-        ssid_match = re.search(r'ESSID:"(.+)"', line)
-        if ssid_match is not None:
-            ssid = ssid_match.group(1)
-        else:
-            print('error parsing ssid: ' + line)
-    elif line.startswith('Quality'):
-        # format: Quality=64/70    Signal level=-46 dBm
-        quality_match = re.search(r'Quality=(.+)/70', line)
-        if quality_match is not None:
-            quality = quality_match.group(1)
-        else:
-            print('error parsing quality: ' + line)
-if line.startswith('Cell ') and ssid is not None and quality is not None:
-    ap = AccessPoint(ssid, quality)
-    access_points.append(ap)
-
 print('Access points:')
+access_points = network.access_points(iface_name)
 for ap in access_points:
     ap_str = ap.ssid + ': ' + ap.quality + '/70'
     print('  ' + ap_str)
@@ -74,40 +29,23 @@ if args.ssid is None or args.pwd is None:
 
 print('Connecting...')
 print('  ...generating wpa passphrase')
-wpa_conf = output(' wpa_passphrase {} {}'.format(args.ssid, args.pwd))
-
-wpa_conf_filename = os.getcwd() + '/wpa.conf'
-print('  ...writing wpa.conf to: ' + wpa_conf_filename)
-with open(wpa_conf_filename, 'w') as wpa_conf_file:
-    wpa_conf_file.write(wpa_conf)
+wpa_conf_filename = network.generate_wpa_conf(args.ssid, args.pwd)
 
 print('  ...stopping all running wpa_supplicants')
-subprocess.call('killall -9 wpa_supplicant', shell=True)
+network.killall_wpa_supplicants()
 
 # do not run wpa_supplicant with -B - it's not killed when nem is killed
 print('  ...connecting to wifi')
-
-
-def wpa_connection_target(iface_name, wpa_conf_filename):
-    subprocess.call('wpa_supplicant -i ' + iface_name + ' -c ' + wpa_conf_filename + ' -D wext', shell=True)
-
-
-wpa_connection = threading.Thread(target=wpa_connection_target, args=(iface_name, wpa_conf_filename))
-wpa_connection.start()
+network.connect(iface_name, wpa_conf_filename)
 
 print('  ...setting up dhcp')
-subprocess.call('dhclient ' + iface_name, shell=True)
+network.dhcp(iface_name)
 
 print('  ...setting up google DNS')
-with open('/etc/resolv.conf', 'w') as resolv_conf:
-    resolv_conf.write('nameserver 8.8.8.8')
+network.dns()
 
 print('  ...ping google.com')
-subprocess.call('ping google.com', shell=True)
+network.test()
 
-
-# wpa_passphrase UPC5774344 RHJLEWKN > wpa.conf
-# sudo wpa_supplicant -i wlan0 -c wpa.conf -D wext
-# sudo dhclient wlan0
-# echo nameserver 8.8.8.8 | sudo tee /etc/resolv.conf
-# ping google.com
+while True:
+    time.sleep(1)
