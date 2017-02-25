@@ -2,11 +2,13 @@
 
 import argparse
 from lib import network
+import os
 import time
 
 parser = argparse.ArgumentParser(description='Connect to wireless network with WPA')
 parser.add_argument('--ssid', '-s', help='SSID for wifi access point')
 parser.add_argument('--pwd', '-p', help='passphrase for wifi access point')
+parser.add_argument('--last', '-l', action='store_true', help='use last saved connection')
 
 args = parser.parse_args()
 
@@ -23,13 +25,16 @@ for ap in access_points:
     ap_str = ap.ssid + ': ' + ap.quality + '/70'
     print('  ' + ap_str)
 
-if args.ssid is None or args.pwd is None:
+if (args.ssid is None or args.pwd is None) and not args.last:
     print('Choose wifi and enter ssid and passphrase')
     exit(0)
 
 print('Connecting...')
-print('  ...generating wpa passphrase')
-wpa_conf_filename = network.generate_wpa_conf(args.ssid, args.pwd)
+
+wpa_conf_filename = os.getcwd() + '/wpa.conf'
+if not args.last:
+    print('  ...generating wpa conf file')
+    network.generate_wpa_conf(args.ssid, args.pwd, wpa_conf_filename)
 
 print('  ...stopping all running wpa_supplicants')
 network.killall_wpa_supplicants()

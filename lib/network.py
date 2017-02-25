@@ -1,5 +1,4 @@
 
-import os
 import re
 import subprocess
 import threading
@@ -58,13 +57,10 @@ def access_points(iface_name):
     return access_points
 
 
-def generate_wpa_conf(ssid, passphrase):
+def generate_wpa_conf(ssid, passphrase, wpa_conf_filename):
     wpa_conf = output(' wpa_passphrase {} {}'.format(ssid, passphrase))
-    wpa_conf_filename = os.getcwd() + '/wpa.conf'
-    print('  ...writing wpa.conf to: ' + wpa_conf_filename)
     with open(wpa_conf_filename, 'w') as wpa_conf_file:
         wpa_conf_file.write(wpa_conf)
-    return wpa_conf_filename
 
 
 def killall_wpa_supplicants():
